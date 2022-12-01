@@ -22,7 +22,7 @@ function main(path: string) {
 
     elfsWeight.sort((a, b) => b - a);
 
-    const topThree = elfsWeight[0]! + elfsWeight[1]! + elfsWeight[2]!;
+    const topThree = elfsWeight[0] + elfsWeight[1] + elfsWeight[2];
 
     console.log(topThree);
 }
