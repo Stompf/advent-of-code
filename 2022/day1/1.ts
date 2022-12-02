@@ -26,5 +26,4 @@ function main(path: string) {
 }
 
 main(path.join(__dirname, "./example.txt"));
-
 main(path.join(__dirname, "./input.txt"));
