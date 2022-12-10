@@ -11,7 +11,7 @@
                 "run-script",
                 "start",
                 "--",
-                "2022/day10/2.ts"
+                "${relativeFile}"
             ],
             "runtimeExecutable": "npm",
             "skipFiles": [
@@ -19,16 +19,6 @@
             ],
             "type": "node"
         },
+    ],
 
-        {
-            "type": "node",
-            "request": "launch",
-            "name": "Launch Program",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "program": "${workspaceFolder}/2022/day9/2.ts",
-            
-        }
-    ]
 }
