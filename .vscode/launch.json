@@ -11,7 +11,7 @@
                 "run-script",
                 "start",
                 "--",
-                "2022/day9/2.ts"
+                "2022/day10/2.ts"
             ],
             "runtimeExecutable": "npm",
             "skipFiles": [
