@@ -1,4 +1,4 @@
-import path from "path";
+import path, { posix } from "path";
 import fs from "fs";
 
 interface Coordinate {
@@ -27,6 +27,7 @@ function main(path: string) {
 
     let mapMinX = Number.MAX_VALUE;
     let mapMaxX = -1;
+    let mapMaxY = -1;
 
     coords.forEach((coordArray) => {
         coordArray.forEach((coord, index) => {
@@ -42,6 +43,7 @@ function main(path: string) {
 
             mapMinX = Math.min(minX, mapMinX);
             mapMaxX = Math.max(maxX, mapMaxX);
+            mapMaxY = Math.max(maxY, mapMaxY);
 
             for (let x = minX; x <= maxX; x++) {
                 for (let y = minY; y <= maxY; y++) {
@@ -55,11 +57,43 @@ function main(path: string) {
     });
 
     let oldPos: Coordinate = { x: 500, y: 0 };
+    let steps = 0;
 
     while (true) {
         const pos = { ...oldPos };
+        while (pos.y <= mapMaxY) {
+            steps++;
+            const newPosY = pos.y + 1;
+            if (map[pos.x][newPosY] === "#") {
+                let newPosX = pos.x - 1;
+                if (map[newPosX][newPosY] !== "#") {
+                    map[newPosX][newPosY] = "#";
+                    oldPos = { ...pos };
+                    break;
+                }
+
+                newPosX = pos.x + 1;
+                if (map[newPosX][newPosY] !== "#") {
+                    map[newPosX][newPosY] = "#";
+                    oldPos = { ...pos };
+                    break;
+                }
+
+                map[pos.x][pos.y] = "#";
+                oldPos = { x: pos.x, y: pos.y - 1 };
+                break;
+            }
+
+            pos.y++;
+        }
+
+        if (pos.y === 0 && pos.x === 500) {
+            break;
+        }
     }
+
+    console.log(steps);
 }
 
 main(path.join(__dirname, "./example.txt"));
-main(path.join(__dirname, "./input.txt"));
+// main(path.join(__dirname, "./input.txt"));
