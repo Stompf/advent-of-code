@@ -1,66 +1,125 @@
 import path from "path";
 import fs from "fs";
+import { pseudoRandomBytes } from "crypto";
+
+interface Coordinate {
+    x: number;
+    y: number;
+}
+
+function toCoordinate(str: string): Coordinate {
+    const [x, y] = str.split(",").map(Number);
+    return {
+        x,
+        y,
+    };
+}
+
+function toString(coord: Coordinate): string {
+    return `${coord.x},${coord.y}`;
+}
 
 function main(path: string) {
-    const lines = fs
+    const coords = fs
         .readFileSync(path, "utf-8")
         .split("\n")
         .filter(Boolean)
-        .map((l) => JSON.parse(l));
+        .map((line) => {
+            return line.split("->").map(toCoordinate);
+        });
 
-    lines.push(JSON.parse("[[2]]"), JSON.parse("[[6]]"));
+    const map = new Set<string>();
 
-    lines.sort((a, b) => {
-        const res = compare(JSON.parse(JSON.stringify(a)), JSON.parse(JSON.stringify(b)));
-        return res ? -1 : 1;
+    let mapMinX = Number.MAX_VALUE;
+    let mapMinY = Number.MAX_VALUE;
+    let mapMaxX = -1;
+    let mapMaxY = -1;
+
+    coords.forEach((coordArray) => {
+        coordArray.forEach((coord, index) => {
+            const nextCoord = coordArray[index + 1];
+            if (!nextCoord) {
+                return;
+            }
+
+            const minX = Math.min(coord.x, nextCoord.x);
+            const maxX = Math.max(coord.x, nextCoord.x);
+            const minY = Math.min(coord.y, nextCoord.y);
+            const maxY = Math.max(coord.y, nextCoord.y);
+
+            mapMinX = Math.min(minX, mapMinX);
+            mapMaxX = Math.max(maxX, mapMaxX);
+            mapMaxY = Math.max(maxY, mapMaxY);
+            mapMinY = Math.min(minY, mapMinY);
+
+            for (let x = minX; x <= maxX; x++) {
+                for (let y = minY; y <= maxY; y++) {
+                    map.add(toString({ x, y }));
+                }
+            }
+        });
     });
 
-    const index1 = lines.findIndex((x) => JSON.stringify(x) === "[[2]]") + 1;
-    const index2 = lines.findIndex((x) => JSON.stringify(x) === "[[6]]") + 1;
+    console.log(mapMinX, mapMaxX, mapMinY, mapMaxY);
 
-    console.log(index1 * index2);
-}
+    const startMap = map.size;
 
-function isNumber(x: number) {
-    return !Array.isArray(x) && !isNaN(x);
-}
+    let simulate = true;
 
-function compare(left: number[], right: number[]): boolean | undefined {
-    while (left.length && right.length) {
-        const l = left.shift()!;
-        const r = right.shift()!;
-
-        if (isNumber(l) && isNumber(r)) {
-            if (l < r) {
-                return true;
-            } else if (l > r) {
-                return false;
-            }
-        } else if (Array.isArray(l) && Array.isArray(r)) {
-            const res = compare(l, r);
-            if (res !== undefined) {
-                return res;
-            }
-        } else if (isNumber(l) && Array.isArray(r)) {
-            const res = compare([l], r);
-            if (res !== undefined) {
-                return res;
-            }
-        } else if (Array.isArray(l) && isNumber(r)) {
-            const res = compare(l, [r]);
-            if (res !== undefined) {
-                return res;
-            }
+    const simulateDropStep = (pos: Coordinate): Coordinate | boolean => {
+        if (pos.y >= mapMaxY + 1) {
+            return true;
         }
+
+        let newPos = { x: pos.x, y: pos.y + 1 };
+        if (!map.has(toString(newPos))) {
+            return newPos;
+        }
+
+        newPos.x -= 1;
+        if (!map.has(toString(newPos))) {
+            return newPos;
+        }
+
+        newPos.x += 2;
+        if (!map.has(toString(newPos))) {
+            return newPos;
+        }
+
+        if (pos.x === 500 && pos.y === 0) {
+            simulate = false;
+        }
+
+        return true;
+    };
+
+    let start = { x: 500, y: 0 };
+    let currPos = { ...start };
+    while (simulate) {
+        const sim = simulateDropStep(currPos);
+
+        if (typeof sim === "boolean") {
+            map.add(toString(currPos));
+            currPos = { ...start };
+        } else {
+            currPos = sim;
+        }
+
+        // for (let yIndex = 0; yIndex <= mapMaxY; yIndex++) {
+        //     let spaces = "";
+        //     for (let xIndex = mapMinX; xIndex <= mapMaxX; xIndex++) {
+        //         if (currPos.x === xIndex && currPos.y === yIndex) {
+        //             spaces += "o";
+        //         } else {
+        //             spaces += map.has(toString({ x: xIndex, y: yIndex })) ? "#" : ".";
+        //         }
+        //     }
+        //     console.log(spaces);
+        // }
     }
 
-    if (left.length) {
-        return false;
-    }
-    if (right.length) {
-        return true;
-    }
+    console.log(map.size - startMap);
 }
 
-main(path.join(__dirname, "./example.txt"));
+// main(path.join(__dirname, "./example.txt"));
 main(path.join(__dirname, "./input.txt"));

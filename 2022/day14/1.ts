@@ -1,4 +1,4 @@
-import path, { posix } from "path";
+import path from "path";
 import fs from "fs";
 
 interface Coordinate {
@@ -14,6 +14,10 @@ function toCoordinate(str: string): Coordinate {
     };
 }
 
+function toString(coord: Coordinate): string {
+    return `${coord.x},${coord.y}`;
+}
+
 function main(path: string) {
     const coords = fs
         .readFileSync(path, "utf-8")
@@ -23,9 +27,10 @@ function main(path: string) {
             return line.split("->").map(toCoordinate);
         });
 
-    const map = [] as string[][];
+    const map = new Set<string>();
 
     let mapMinX = Number.MAX_VALUE;
+    let mapMinY = Number.MAX_VALUE;
     let mapMaxX = -1;
     let mapMaxY = -1;
 
@@ -44,56 +49,75 @@ function main(path: string) {
             mapMinX = Math.min(minX, mapMinX);
             mapMaxX = Math.max(maxX, mapMaxX);
             mapMaxY = Math.max(maxY, mapMaxY);
+            mapMinY = Math.min(minY, mapMinY);
 
             for (let x = minX; x <= maxX; x++) {
                 for (let y = minY; y <= maxY; y++) {
-                    if (!map[x]) {
-                        map[x] = [];
-                    }
-                    map[x][y] = "#";
+                    map.add(toString({ x, y }));
                 }
             }
         });
     });
 
-    let oldPos: Coordinate = { x: 500, y: 0 };
-    let steps = 0;
+    console.log(mapMinX, mapMaxX, mapMinY, mapMaxY);
 
-    while (true) {
-        const pos = { ...oldPos };
-        while (pos.y <= mapMaxY) {
-            steps++;
-            const newPosY = pos.y + 1;
-            if (map[pos.x][newPosY] === "#") {
-                let newPosX = pos.x - 1;
-                if (map[newPosX][newPosY] !== "#") {
-                    map[newPosX][newPosY] = "#";
-                    oldPos = { ...pos };
-                    break;
-                }
+    const startMap = map.size;
 
-                newPosX = pos.x + 1;
-                if (map[newPosX][newPosY] !== "#") {
-                    map[newPosX][newPosY] = "#";
-                    oldPos = { ...pos };
-                    break;
-                }
+    let simulate = true;
 
-                map[pos.x][pos.y] = "#";
-                oldPos = { x: pos.x, y: pos.y - 1 };
-                break;
+    const simulateDropStep = (pos: Coordinate): Coordinate | boolean => {
+        if (pos.x < mapMinX || pos.x > mapMaxX || pos.y > mapMaxY) {
+            simulate = false;
+            return true;
+        }
+
+        let newPos = { x: pos.x, y: pos.y + 1 };
+        if (!map.has(toString(newPos))) {
+            return newPos;
+        }
+
+        newPos.x -= 1;
+        if (!map.has(toString(newPos))) {
+            return newPos;
+        }
+
+        newPos.x += 2;
+        if (!map.has(toString(newPos))) {
+            return newPos;
+        }
+
+        return true;
+    };
+
+    let start = { x: 500, y: 0 };
+    let currPos = { ...start };
+    while (simulate) {
+        const sim = simulateDropStep(currPos);
+
+        if (simulate) {
+            if (typeof sim === "boolean") {
+                map.add(toString(currPos));
+                currPos = { ...start };
+            } else {
+                currPos = sim;
             }
-
-            pos.y++;
         }
 
-        if (pos.y === 0 && pos.x === 500) {
-            break;
-        }
+        // for (let yIndex = 0; yIndex <= mapMaxY; yIndex++) {
+        //     let spaces = "";
+        //     for (let xIndex = mapMinX; xIndex <= mapMaxX; xIndex++) {
+        //         if (currPos.x === xIndex && currPos.y === yIndex) {
+        //             spaces += "o";
+        //         } else {
+        //             spaces += map.has(toString({ x: xIndex, y: yIndex })) ? "#" : ".";
+        //         }
+        //     }
+        //     console.log(spaces);
+        // }
     }
 
-    console.log(steps);
+    console.log(map.size - startMap);
 }
 
-main(path.join(__dirname, "./example.txt"));
-// main(path.join(__dirname, "./input.txt"));
+// main(path.join(__dirname, "./example.txt"));
+main(path.join(__dirname, "./input.txt"));
