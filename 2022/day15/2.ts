@@ -1,14 +1,20 @@
-import path from "path";
+import path, { relative } from "path";
 import fs from "fs";
-import { pseudoRandomBytes } from "crypto";
+import { last } from "lodash";
 
 interface Coordinate {
     x: number;
     y: number;
 }
 
+interface Sensor {
+    pos: Coordinate;
+    beacon: Coordinate;
+    distance: number;
+}
+
 function toCoordinate(str: string): Coordinate {
-    const [x, y] = str.split(",").map(Number);
+    const [x, y] = str.split(", ").map(Number);
     return {
         x,
         y,
@@ -19,107 +25,77 @@ function toString(coord: Coordinate): string {
     return `${coord.x},${coord.y}`;
 }
 
-function main(path: string) {
-    const coords = fs
+function main(path: string, maxCoordPos: number) {
+    const sensors = fs
         .readFileSync(path, "utf-8")
         .split("\n")
         .filter(Boolean)
-        .map((line) => {
-            return line.split("->").map(toCoordinate);
+        .map((line): Sensor => {
+            const str = line
+                .replace("Sensor at ", "")
+                .replace("closest beacon is at ", "")
+                .replace(/x=/g, "")
+                .replace(/y=/g, "")
+                .split(": ");
+
+            const pos = toCoordinate(str[0]);
+            const beacon = toCoordinate(str[1]);
+
+            return {
+                pos,
+                beacon,
+                distance: Math.abs(pos.x - beacon.x) + Math.abs(pos.y - beacon.y),
+            };
         });
 
-    const map = new Set<string>();
+    const isOutofRange = (coord: Coordinate) =>
+        sensors.every(
+            (sensor) =>
+                Math.abs(sensor.pos.x - coord.x) + Math.abs(sensor.pos.y - coord.y) >
+                sensor.distance
+        );
 
-    let mapMinX = Number.MAX_VALUE;
-    let mapMinY = Number.MAX_VALUE;
-    let mapMaxX = -1;
-    let mapMaxY = -1;
+    // for (let xIndex = 0; xIndex <= maxCoordPos; xIndex++) {
+    //     for (let yindex = 0; yindex <= maxCoordPos; yindex++) {
+    //         if (isOutofRange({ x: xIndex, y: yindex })) {
+    //             console.log(xIndex, yindex);
+    //         }
+    //     }
+    // }
 
-    coords.forEach((coordArray) => {
-        coordArray.forEach((coord, index) => {
-            const nextCoord = coordArray[index + 1];
-            if (!nextCoord) {
-                return;
-            }
+    const xy = [-1, 1];
+    let val = 0;
 
-            const minX = Math.min(coord.x, nextCoord.x);
-            const maxX = Math.max(coord.x, nextCoord.x);
-            const minY = Math.min(coord.y, nextCoord.y);
-            const maxY = Math.max(coord.y, nextCoord.y);
+    sensors.forEach((sensor) => {
+        if (val !== 0) {
+            return;
+        }
 
-            mapMinX = Math.min(minX, mapMinX);
-            mapMaxX = Math.max(maxX, mapMaxX);
-            mapMaxY = Math.max(maxY, mapMaxY);
-            mapMinY = Math.min(minY, mapMinY);
+        const { distance, pos } = sensor;
 
-            for (let x = minX; x <= maxX; x++) {
-                for (let y = minY; y <= maxY; y++) {
-                    map.add(toString({ x, y }));
+        xy.forEach((xo) => {
+            xy.forEach((yo) => {
+                for (let dx = 0; dx <= distance + 1; dx++) {
+                    const dy = distance + 1 - dx;
+                    const x = pos.x + dx * xo;
+                    const y = pos.y + dy * yo;
+                    if (
+                        x >= 0 &&
+                        y >= 0 &&
+                        x <= maxCoordPos &&
+                        y <= maxCoordPos &&
+                        isOutofRange({ x, y })
+                    ) {
+                        val = x * 4000000 + y;
+                        return;
+                    }
                 }
-            }
+            });
         });
     });
 
-    console.log(mapMinX, mapMaxX, mapMinY, mapMaxY);
-
-    const startMap = map.size;
-
-    let simulate = true;
-
-    const simulateDropStep = (pos: Coordinate): Coordinate | boolean => {
-        if (pos.y >= mapMaxY + 1) {
-            return true;
-        }
-
-        let newPos = { x: pos.x, y: pos.y + 1 };
-        if (!map.has(toString(newPos))) {
-            return newPos;
-        }
-
-        newPos.x -= 1;
-        if (!map.has(toString(newPos))) {
-            return newPos;
-        }
-
-        newPos.x += 2;
-        if (!map.has(toString(newPos))) {
-            return newPos;
-        }
-
-        if (pos.x === 500 && pos.y === 0) {
-            simulate = false;
-        }
-
-        return true;
-    };
-
-    let start = { x: 500, y: 0 };
-    let currPos = { ...start };
-    while (simulate) {
-        const sim = simulateDropStep(currPos);
-
-        if (typeof sim === "boolean") {
-            map.add(toString(currPos));
-            currPos = { ...start };
-        } else {
-            currPos = sim;
-        }
-
-        // for (let yIndex = 0; yIndex <= mapMaxY; yIndex++) {
-        //     let spaces = "";
-        //     for (let xIndex = mapMinX; xIndex <= mapMaxX; xIndex++) {
-        //         if (currPos.x === xIndex && currPos.y === yIndex) {
-        //             spaces += "o";
-        //         } else {
-        //             spaces += map.has(toString({ x: xIndex, y: yIndex })) ? "#" : ".";
-        //         }
-        //     }
-        //     console.log(spaces);
-        // }
-    }
-
-    console.log(map.size - startMap);
+    console.log(val);
 }
 
-// main(path.join(__dirname, "./example.txt"));
-main(path.join(__dirname, "./input.txt"));
+main(path.join(__dirname, "./example.txt"), 20);
+main(path.join(__dirname, "./input.txt"), 4000000);
