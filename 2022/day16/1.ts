@@ -1,11 +1,20 @@
 import path from "path";
 import fs from "fs";
+import { trim } from "lodash";
 
 interface Valve {
     name: string;
     rate: number;
     leadsTo: string[];
 }
+
+const distanceMemo = new Map();
+
+const distanceMemoKey = (currValve: Valve, targetValve: Valve) => {
+    return currValve.name < targetValve.name
+        ? currValve.name + targetValve.name
+        : targetValve.name + currValve.name;
+};
 
 function main(path: string) {
     const valves = fs
@@ -21,31 +30,73 @@ function main(path: string) {
                 .split(",");
 
             return {
-                name: str[0],
-                rate: Number(str[1]),
-                leadsTo: str.slice(2),
+                name: str[0].trim(),
+                rate: Number(str[1].trim()),
+                leadsTo: str.slice(2).map(trim),
             };
         });
 
-    const set = new Set<string>();
-    let minutesLeft = 30;
-    let currentPressure = 0;
+    const nextOptimalValve = (currValve: Valve, timeLeft: number, contesters: Valve[]) => {
+        let optimalValve = null;
+        let value = 0;
 
-    let previousValve: Valve | undefined;
-    let currentValve = valves.find((v) => v.name === "AA");
-    if (!currentValve) {
+        for (let contester of contesters) {
+            let newContesters = [...contesters].filter((v) => v.name !== contester.name);
+            let newTime = timeLeft - distanceTo(currValve, contester) - 1;
+            if (newTime <= 0) {
+                continue;
+            }
+            let score = newTime * contester.rate;
+            let optimal = nextOptimalValve(contester, newTime, newContesters);
+            score += optimal.value;
+
+            if (score > value) {
+                optimalValve = contester;
+                value = score;
+            }
+        }
+
+        return { optimalValve, value };
+    };
+
+    const distanceTo = (currValve: Valve, targetValve: Valve) => {
+        let key = distanceMemoKey(currValve, targetValve);
+        if (distanceMemo.has(key)) {
+            return distanceMemo.get(key);
+        }
+        let visited = new Set<string>();
+        let queue = [currValve];
+        let traveled = 0;
+
+        while (queue.length > 0) {
+            let nextQueue = [];
+            for (let valve of queue) {
+                if (visited.has(valve.name)) {
+                    continue;
+                }
+                visited.add(valve.name);
+                if (valve.name === targetValve.name) {
+                    distanceMemo.set(key, traveled);
+                    return traveled;
+                }
+                for (let neighbor of valve.leadsTo) {
+                    const n = valves.find((v) => v.name === neighbor);
+                    nextQueue.push(n!);
+                }
+            }
+            queue = nextQueue;
+            traveled++;
+        }
+    };
+
+    const start = valves.find(({ name }) => name === "AA");
+    if (!start) {
         throw new Error("Could not find valve AA");
     }
 
-    while (minutesLeft > 0) {
-        set.add(currentValve.name);
-        currentPressure += minutesLeft * (previousValve?.rate || 0);
-
-        minutesLeft -= 1;
-    }
-
-    console.log(valves);
+    const contesters = valves.filter(({ rate }) => rate > 0);
+    console.log(nextOptimalValve(start, 30, contesters).value);
 }
 
 main(path.join(__dirname, "./example.txt"));
-// main(path.join(__dirname, "./input.txt"), 2000000);
+main(path.join(__dirname, "./input.txt"));

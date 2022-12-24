@@ -1,101 +1,149 @@
-import path, { relative } from "path";
+import path from "path";
 import fs from "fs";
-import { last } from "lodash";
+import { trim } from "lodash";
 
-interface Coordinate {
-    x: number;
-    y: number;
+interface Valve {
+    name: string;
+    rate: number;
+    leadsTo: string[];
 }
 
-interface Sensor {
-    pos: Coordinate;
-    beacon: Coordinate;
-    distance: number;
-}
+const distanceMemo = new Map();
 
-function toCoordinate(str: string): Coordinate {
-    const [x, y] = str.split(", ").map(Number);
-    return {
-        x,
-        y,
-    };
-}
+const distanceMemoKey = (currValve: Valve, targetValve: Valve) => {
+    return currValve.name < targetValve.name
+        ? currValve.name + targetValve.name
+        : targetValve.name + currValve.name;
+};
 
-function toString(coord: Coordinate): string {
-    return `${coord.x},${coord.y}`;
-}
-
-function main(path: string, maxCoordPos: number) {
-    const sensors = fs
+function main(path: string) {
+    const valves = fs
         .readFileSync(path, "utf-8")
         .split("\n")
         .filter(Boolean)
-        .map((line): Sensor => {
+        .map((line): Valve => {
             const str = line
-                .replace("Sensor at ", "")
-                .replace("closest beacon is at ", "")
-                .replace(/x=/g, "")
-                .replace(/y=/g, "")
-                .split(": ");
-
-            const pos = toCoordinate(str[0]);
-            const beacon = toCoordinate(str[1]);
+                .replace("Valve ", "")
+                .replace(" has flow rate=", ",")
+                .replace("; tunnels lead to valves ", ",")
+                .replace("; tunnel leads to valve ", ",")
+                .split(",");
 
             return {
-                pos,
-                beacon,
-                distance: Math.abs(pos.x - beacon.x) + Math.abs(pos.y - beacon.y),
+                name: str[0].trim(),
+                rate: Number(str[1].trim()),
+                leadsTo: str.slice(2).map(trim),
             };
         });
 
-    const isOutofRange = (coord: Coordinate) =>
-        sensors.every(
-            (sensor) =>
-                Math.abs(sensor.pos.x - coord.x) + Math.abs(sensor.pos.y - coord.y) >
-                sensor.distance
-        );
+    const nextOptimalValve = (currValve: Valve, timeLeft: number, contesters: Valve[]) => {
+        let optimalValve = null;
+        let value = 0;
 
-    // for (let xIndex = 0; xIndex <= maxCoordPos; xIndex++) {
-    //     for (let yindex = 0; yindex <= maxCoordPos; yindex++) {
-    //         if (isOutofRange({ x: xIndex, y: yindex })) {
-    //             console.log(xIndex, yindex);
-    //         }
-    //     }
-    // }
+        for (let contester of contesters) {
+            let newContesters = [...contesters].filter((v) => v.name !== contester.name);
+            let newTime = timeLeft - distanceTo(currValve, contester) - 1;
+            if (newTime <= 0) {
+                continue;
+            }
+            let score = newTime * contester.rate;
+            let optimal = nextOptimalValve(contester, newTime, newContesters);
+            score += optimal.value;
 
-    const xy = [-1, 1];
-    let val = 0;
-
-    sensors.forEach((sensor) => {
-        if (val !== 0) {
-            return;
+            if (score > value) {
+                optimalValve = contester;
+                value = score;
+            }
         }
 
-        const { distance, pos } = sensor;
+        return { optimalValve, value };
+    };
 
-        xy.forEach((xo) => {
-            xy.forEach((yo) => {
-                for (let dx = 0; dx <= distance + 1; dx++) {
-                    const dy = distance + 1 - dx;
-                    const x = pos.x + dx * xo;
-                    const y = pos.y + dy * yo;
-                    if (
-                        x >= 0 &&
-                        y >= 0 &&
-                        x <= maxCoordPos &&
-                        y <= maxCoordPos &&
-                        isOutofRange({ x, y })
-                    ) {
-                        val = x * 4000000 + y;
-                        return;
-                    }
+    const distanceTo = (currValve: Valve, targetValve: Valve) => {
+        let key = distanceMemoKey(currValve, targetValve);
+        if (distanceMemo.has(key)) {
+            return distanceMemo.get(key);
+        }
+        let visited = new Set<string>();
+        let queue = [currValve];
+        let traveled = 0;
+
+        while (queue.length > 0) {
+            let nextQueue = [];
+            for (let valve of queue) {
+                if (visited.has(valve.name)) {
+                    continue;
                 }
-            });
-        });
-    });
+                visited.add(valve.name);
+                if (valve.name === targetValve.name) {
+                    distanceMemo.set(key, traveled);
+                    return traveled;
+                }
+                for (let neighbor of valve.leadsTo) {
+                    const n = valves.find((v) => v.name === neighbor);
+                    nextQueue.push(n!);
+                }
+            }
+            queue = nextQueue;
+            traveled++;
+        }
+    };
 
-    console.log(val);
+    const calcScore = (myValves: Valve[], elephantValves: Valve[]) => {
+        let score = 0;
+        for (let i = 0; i < myValves.length; i++) {
+            for (let j = i + 1; j < myValves.length; j++) {
+                score += distanceTo(myValves[i], myValves[j]);
+            }
+        }
+        for (let i = 0; i < elephantValves.length; i++) {
+            for (let j = i + 1; j < elephantValves.length; j++) {
+                score += distanceTo(elephantValves[i], elephantValves[j]);
+            }
+        }
+
+        return score;
+    };
+
+    const findBestSplits = (contesters: Valve[]) => {
+        let score = Infinity;
+        let myValves: Valve[] = [];
+        let elephantValves: Valve[] = [];
+
+        // Random paths
+        for (let i = 0; i < 100000; i++) {
+            let elephantValvesTest = [];
+            let myValvesTest = [];
+            for (let contester of contesters) {
+                if (Math.random() > 0.5) {
+                    myValvesTest.push(contester);
+                } else {
+                    elephantValvesTest.push(contester);
+                }
+            }
+            let newScore = calcScore(myValvesTest, elephantValvesTest);
+            if (newScore < score) {
+                score = newScore;
+                myValves = myValvesTest;
+                elephantValves = elephantValvesTest;
+            }
+        }
+        return { myValves, elephantValves };
+    };
+
+    const start = valves.find(({ name }) => name === "AA");
+    if (!start) {
+        throw new Error("Could not find valve AA");
+    }
+
+    const contesters = valves.filter(({ rate }) => rate > 0);
+    const { myValves, elephantValves } = findBestSplits(contesters);
+
+    const my = nextOptimalValve(start, 26, myValves).value;
+    const eleph = nextOptimalValve(start, 26, elephantValves).value;
+
+    console.log(my + eleph);
 }
 
-main(path.join(__dirname, "./example.txt"), 20);
-main(path.join(__dirname, "./input.txt"), 4000000);
+main(path.join(__dirname, "./example.txt"));
+main(path.join(__dirname, "./input.txt"));
