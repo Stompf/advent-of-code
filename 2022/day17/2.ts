@@ -28,7 +28,7 @@ interface BoundingBox {
 
 class Stone {
     public bbox: BoundingBox;
-    private body: string[][];
+    public body: string[][];
 
     constructor(body: string[][], public x: number, public y: number) {
         this.bbox = {
@@ -86,18 +86,21 @@ class Stone {
     }
 }
 
-function main(path: string) {
-    const windDirections = fs.readFileSync(path, "utf-8").split("").filter(Boolean);
-    console.log(windDirections);
+function main(file: string) {
+    const windDirections = fs.readFileSync(file, "utf-8").split("").filter(Boolean);
 
     let currStoneIndex = 0;
     let currDirection = 0;
     let maxY = 0;
+    let stepsLeft = Infinity;
+    let ySave = 0;
     let stone = new Stone(STONE_ROTATION[currStoneIndex], 2, 4);
     const stones: Stone[] = [];
 
+    const set = new Set<string>();
+
     stones.push(stone);
-    while (stones.length < 1000000000001) {
+    while (stones.length < 2023) {
         const clone = stone.clone();
 
         const windDirection = windDirections[currDirection];
@@ -135,6 +138,8 @@ function main(path: string) {
         });
 
         if (clone.y === clone.bbox.height - 1 || collide) {
+            const key = `${currStoneIndex},${currDirection}`;
+
             maxY = Math.max(stone.y, maxY);
             currStoneIndex++;
             if (currStoneIndex > STONE_ROTATION.length - 1) {
@@ -142,11 +147,31 @@ function main(path: string) {
             }
             const body = STONE_ROTATION[currStoneIndex];
             stone = new Stone(body, 2, maxY + 3 + body.length);
-            stones.push(stone);
 
-            if (stones.length % 10000 === 0) {
-                console.log(stones.length);
+            stones.push(stone);
+            if (stepsLeft !== Infinity) {
+                stepsLeft--;
             }
+
+            if (set.has(key) && ySave === 0) {
+                const floor = Math.floor(2022 / stones.length);
+                const rest = 2022 - floor * stones.length;
+                const ko = floor * maxY;
+                console.log(rest);
+                console.log(ko);
+                ySave = maxY;
+
+                stepsLeft = rest;
+
+                debugger;
+            }
+
+            if (stepsLeft === 0) {
+                const rest = maxY - ySave;
+                console.log(rest);
+                debugger;
+            }
+            set.add(key);
         } else {
             stone.y = clone.y;
         }
@@ -158,7 +183,11 @@ function main(path: string) {
     }
 
     console.log(maxY);
+
+    // stones.reverse().forEach((stone) => {
+    //     fs.writeFileSync(path.join(__dirname, "./output.txt"), stone.body);
+    // });
 }
 
-// main(path.join(__dirname, "./example.txt"));
-main(path.join(__dirname, "./input.txt"));
+main(path.join(__dirname, "./example.txt"));
+// main(path.join(__dirname, "./input.txt"));
